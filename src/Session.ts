@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import Vault from './Vault';
 import chalk from 'chalk';
 import * as util from 'util';
+import { Key } from './types';
 
 /**
  * Session is responsible for coordinating updates in state etc back to the client
@@ -9,15 +10,14 @@ import * as util from 'util';
 export class Session {
     vault: Vault | null = null;
 
-    constructor(private websocket: WebSocket) {
+    constructor(private websocket: WebSocket, public serverPrivateKey: Key, private clientPublicKey: Key) {
         websocket.on('message', (data: WebSocket.Data) => {
             if (typeof data === 'string') {
-                const { type, payload } = JSON.parse(data);
+                const { type, payload } = JSON.parse(serverPrivateKey.decrypt(data));
                 console.log(chalk`{yellow [Session]} receive: {cyan ${type}}`, util.inspect(payload, false, 4, true));
                 // TODO validate message objects!
                 switch (type) {
                     case 'handshake':
-                        // todo handshake should also send authkey that was passed with argv
                         this.vault = new Vault(payload.path);
                         this.bindEvents();
                         break;
@@ -58,10 +58,10 @@ export class Session {
         // binds an event from vault and 'forwards' it to socket
         this.vault.on(type, (payload: any) => {
             console.log(chalk`{yellow [Session]} send: {cyan ${type}}`, util.inspect(payload, false, 4, true));
-            this.websocket.send(JSON.stringify({
+            this.websocket.send(this.clientPublicKey.encrypt(JSON.stringify({
                 type,
                 payload
-            }))
+            })))
         })
     }
 }

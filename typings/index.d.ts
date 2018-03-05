@@ -3,6 +3,10 @@ declare module 'timeout-as-promise' {
     export default delay
 }
 
+declare module 'node-forge' {
+
+}
+
 declare module '1password' {
     import EventEmitter = NodeJS.EventEmitter;
 

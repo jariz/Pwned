@@ -2,6 +2,11 @@ export type Partial<T> = {
     [P in keyof T]?: T[P];
 };
 
+export declare class Key {
+    encrypt(bytes: string): any;
+    decrypt(bytes: string): any;
+}
+
 export enum BreachItemStatus {
     Fetching = 'fetching',
     Error = 'error',
