@@ -1,7 +1,6 @@
 import { EventEmitter } from 'events';
 import Keychain from '1password';
 import { BreachItem, BreachItemStatus } from './types';
-import PQueue from 'p-queue'
 import crypto from 'crypto';
 import fetch from 'node-fetch';
 import { difference } from 'lodash';
@@ -17,7 +16,6 @@ type HashingResult = {
  */
 export default class Vault extends EventEmitter {
     keychain: Keychain;
-    queue: PQueue;
     private _items: BreachItem[] = [];
 
     get items(): BreachItem[] {
@@ -32,9 +30,6 @@ export default class Vault extends EventEmitter {
 
     constructor(path: string) {
         super();
-        this.queue = new PQueue({
-            concurrency: 1
-        });
         this.keychain = new Keychain();
         this.keychain.load(path, error => {
             if (error) {
@@ -45,7 +40,7 @@ export default class Vault extends EventEmitter {
         });
     }
 
-    unlock(master: string) {
+    async unlock(master: string) {
         try {
             this.keychain.unlock(master);
         } catch (ex) {
@@ -75,7 +70,9 @@ export default class Vault extends EventEmitter {
                     }
                 });
 
-            this.queue.addAll(items.map(item => () => (
+            this.emit('unlockSuccess');
+
+            const fetchers = items.map(item => () => (
                 new Promise<HashingResult>(((resolve, reject) => {
                     try {
                         item.unlock();
@@ -134,16 +131,17 @@ export default class Vault extends EventEmitter {
                                 return delay(500);
                             })
                     })
-
                     .catch(() => {
                         this.setItem({
                             uuid: item.uuid,
                             status: BreachItemStatus.Error
                         })
                     })
-            )))
-
-            this.emit('unlockSuccess');
+            ))
+            
+            for (const fetcher of fetchers) {
+                await fetcher()
+            }
         }
     }
 
