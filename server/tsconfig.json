@@ -17,13 +17,13 @@
         "allowSyntheticDefaultImports": true
     },
     "exclude": [
-        "node_modules",
+        "../node_modules",
         "build",
         "scripts",
         "acceptance-tests",
         "webpack",
         "jest",
-        "src/setupTests.ts",
+        "server/src/setupTests.ts",
         "public"
     ]
 }
