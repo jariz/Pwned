@@ -1,8 +1,9 @@
 import WebSocket from 'ws';
 import Vault from './Vault';
 import chalk from 'chalk';
-import * as util from 'util';
-import { Key } from './types';
+import serializeError from 'serialize-error';
+import { cipher as forgeCipher, util, random, Bytes } from 'node-forge';
+import { inspect } from 'util';
 
 /**
  * Session is responsible for coordinating updates in state etc back to the client
@@ -10,11 +11,23 @@ import { Key } from './types';
 export class Session {
     vault: Vault | null = null;
 
-    constructor(private websocket: WebSocket, public serverPrivateKey: Key, private clientPublicKey: Key) {
+    constructor(private websocket: WebSocket, public key: Bytes) {
         websocket.on('message', (data: WebSocket.Data) => {
             if (typeof data === 'string') {
-                const { type, payload } = JSON.parse(serverPrivateKey.decrypt(data));
-                console.log(chalk`{yellow [Session]} receive: {cyan ${type}}`, util.inspect(payload, false, 4, true));
+                const { message, iv } = JSON.parse(data);
+                const decipher = forgeCipher.createDecipher('AES-CBC', this.key);
+                decipher.start({ iv });
+                decipher.update(util.createBuffer(util.decode64(message), 'raw'));
+                decipher.finish();
+                const result = decipher.output.toString();
+                
+                if (!result) {
+                    console.log(chalk`{yellow [Session]} decryption failure!\r\n{dim ${data}}`);
+                    return;
+                }
+                
+                const { type, payload } = JSON.parse(result.toString());
+                console.log(chalk`{yellow [Session]} receive: {cyan ${type}}`, inspect(payload, false, 4, true));
                 // TODO validate message objects!
                 switch (type) {
                     case 'handshake':
@@ -22,7 +35,6 @@ export class Session {
                         this.bindEvents();
                         break;
                     case 'unlock':
-                        // todo: don't send password down the line, use keychain instead for temp storage
                         if (this.vault) {
                             this.vault.unlock(payload.password);
                         }
@@ -37,8 +49,9 @@ export class Session {
         })
 
         websocket.on('close', () => {
-            // delete vault from memory
-            delete this.vault;
+            if (this.vault) {
+                this.vault.destroy();
+            }
         })
     }
 
@@ -57,11 +70,32 @@ export class Session {
 
         // binds an event from vault and 'forwards' it to socket
         this.vault.on(type, (payload: any) => {
-            console.log(chalk`{yellow [Session]} send: {cyan ${type}}`, util.inspect(payload, false, 4, true));
-            this.websocket.send(this.clientPublicKey.encrypt(JSON.stringify({
-                type,
-                payload
-            })))
+            if (payload instanceof Error) {
+                payload = serializeError(payload)
+                delete payload.stack
+            }
+            console.log(chalk`{yellow [Session]} send: {cyan ${type}}`, inspect(payload, false, 4, true));
+            try {
+                const cipher = forgeCipher.createCipher('AES-CBC', this.key);
+
+                const iv = random.getBytesSync(16);
+                cipher.start({ iv });
+                const encoded = JSON.stringify({
+                    type,
+                    payload
+                })
+                cipher.update(util.createBuffer(encoded, 'raw'));
+                cipher.finish();
+                const message = util.encode64(cipher.output.getBytes());
+                
+                this.websocket.send(JSON.stringify({
+                    iv,
+                    message
+                }))
+            } catch (ex) {
+                console.log(chalk`{red ERR!}`, ex);
+            }
+
         })
     }
 }

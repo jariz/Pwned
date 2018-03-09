@@ -3,8 +3,19 @@ declare module 'timeout-as-promise' {
     export default delay
 }
 
-declare module 'node-forge' {
+declare module 'serialize-error' {
+    export default function(error: Error): any;
+}
 
+declare module 'node-forge' {
+    import { Bytes } from 'node-forge';
+    namespace random {
+        export function getBytesSync(amount: number): Bytes;
+    }
+    namespace cipher {
+        function createCipher(algorithm: cipher.Algorithm, payload: Bytes): cipher.BlockCipher;
+        function createDecipher(algorithm: cipher.Algorithm, payload: Bytes): cipher.BlockCipher;
+    }
 }
 
 declare module '1password' {

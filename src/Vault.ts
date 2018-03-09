@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import fetch from 'node-fetch';
 import { difference } from 'lodash';
 import delay from 'timeout-as-promise'
+import chalk from 'chalk';
 
 type HashingResult = {
     uuid: string,
@@ -17,6 +18,7 @@ type HashingResult = {
 export default class Vault extends EventEmitter {
     keychain: Keychain;
     private _items: BreachItem[] = [];
+    private destroyed: boolean = false;
 
     get items(): BreachItem[] {
         return this._items;
@@ -140,9 +142,17 @@ export default class Vault extends EventEmitter {
             ))
             
             for (const fetcher of fetchers) {
-                await fetcher()
+                if (!this.destroyed) {
+                    await fetcher()
+                }
             }
         }
+    }
+    
+    public destroy () {
+        console.log(chalk`{yellow [Vault]} Vault destroyed.`)
+        delete this.keychain;
+        this.destroyed = true
     }
 
     private setItem(partialItem: Partial<BreachItem>) {
